@@ -7,6 +7,7 @@ A native Omarchy bar widget and panel for local usage, limits, pace, recent hist
 - Shows available local AI-agent usage records in one bar widget for Claude Code, Codex, Fireworks, Hermes, Grok, Antigravity, and OpenCode Go.
 - Claude Code, Codex, Fireworks, Hermes, Grok, Antigravity, and OpenCode Go provider slots are enabled by default; other providers can appear through standard records and Hermes route discovery.
 - Ships an in-panel settings view (gear button or `s`) that pins a **default tab** — the chosen harness is shown first and opened every time — and switches individual harnesses off or on; a switched-off harness disappears from the tabs and bar and is skipped by refresh until it is switched back on.
+- Manages Claude Code, Codex, and Grok subscription accounts through Omarchy's own `omarchy agent account`: add or re-sign an account, choose which one new sessions use, rename it, and turn on automatic switching near a limit. See [Accounts](#accounts).
 - Marks the Hermes tab with the Nous girl artwork from the Hermes desktop app, bundled locally as `assets/hermes.png` plus a light-surface twin; the marks are part of this repository and no network fetch is ever made for them.
 - Displays limits, today, last-7-days, and all-time token cards, a daily activity chart, and model token breakdowns with four model-period filters: **Today**, **7 days**, **1 month** (rolling 30 days), and **All time**. The Claude Code tab adds an **API equiv.** card: what its all-time tokens would cost at Anthropic API list prices.
 - Normalizes provider limit records to show only windows actually supplied by upstream providers (session/5-hour, weekly, monthly, reset times, used/limit/remaining, and plan labels).
@@ -56,9 +57,21 @@ The Claude Code tab shows a fourth card, **API equiv.**, beside Today, Last 7 Da
 - **Unpriced models.** A model missing from the list, or one whose record carries only a total without per-bucket detail, is left out of the estimate and counted under **Unpriced**.
 - **Not covered.** All time only: the period filters keep no per-bucket history. Claude Haiku 5.5 is priced at its tier for prompts up to 100,000 tokens, since records keep no prompt lengths. Fast mode, the Batch API discount, and the US-only inference multiplier are ignored.
 
+## Accounts
+
+Omarchy keeps the accounts: `omarchy agent account` owns the registry (`~/.local/state/omarchy/agents/accounts/<agent>.json`) and every sign-in, and its collectors add each registered account and the switch settings to the usage record. The panel shows what the record carries and hands every change back to Omarchy; it never reads or writes credentials.
+
+- **+ Account** in the header of the Claude Code, Codex, and Grok tabs opens a floating terminal running `omarchy agent account add <agent>`. Signing in needs a browser and, for Claude, a code pasted back, so it runs there rather than inside the panel. Reopening the panel refreshes the limits and shows the new account.
+- **ACCOUNTS** appears once an agent has two accounts or more. Each row shows the name, email, plan, every limit window's percentage, and a meter for the fullest window. The account new sessions use is marked **Active**; **Use** moves new sessions to another one (running sessions stay where they are). **Sign in again** appears when an account's sign-in has lapsed and reopens the terminal with `--reauth`.
+- **Rename** by clicking a name: Enter saves, Esc or clicking away cancels. Names are up to 40 characters.
+- **Auto-switch** toggles between `auto` (new sessions move to the account with the most room once the active one reaches the threshold) and `manual` (Omarchy only notifies). The − / + buttons step the threshold by 5% between 50% and 100%.
+- Use, rename, and switch changes run `omarchy-agent-account-use`, `-rename`, and `-mode` one at a time under the same supervisor as the collectors (see [Process boundary](#process-boundary)), then refresh that agent's limits. A failed change shows the command's first error line under the section.
+
 ## Interface
 
 Version 1.11.0 refreshes the dashboard with a wider layout, clearer provider and subscription filters, usage totals and the daily chart before secondary details, and compact refresh, settings, and close controls. The panel uses an opaque, theme-coloured reading surface without changing global theme settings. That visual refresh did not change collector logic, token accounting, settings persistence, or process protections.
+
+Version 1.13.0 adds account management for Claude Code, Codex, and Grok on top of Omarchy's `omarchy agent account`: a **+ Account** header button, an **ACCOUNTS** section with Use, inline rename, and Sign in again, and the auto-switch toggle and threshold (see [Accounts](#accounts)).
 
 Version 1.12.0 adds the **API equiv.** card to the Claude Code tab: the all-time tokens priced at Anthropic API list prices, as a 5-minute to 1-hour cache-write range, with a hover card splitting cache and non-cache costs (see [API equivalent](#api-equivalent-claude-code)). With four cards on that tab, the card values use a smaller font.
 
@@ -137,6 +150,7 @@ Every command the plugin runs (the collectors, the shared Omarchy updater, the b
 - **Producer-side stream caps.** stdout and stderr are each relayed through a pinned `head -c` cap (256 KiB per stream) before they can reach the long-lived shell process, so a flooding child is severed at the pipe instead of being buffered. The sync scan has its own wider cap above the helper's 2 MiB budget.
 - **No PATH resolution.** Every binary and interpreter is invoked by absolute trusted path (`/usr/bin/bash`, `/usr/bin/python3`, `/usr/bin/setsid`, `/usr/bin/head`, the Omarchy updater under `/usr/share/omarchy`), children get a cleared environment plus an explicit `HOME`, the fixed `OMARCHY_PATH=/usr/share/omarchy` and the fixed `PATH=/usr/bin` only, and no shebang is ever consulted. The fixed `PATH` exists for Omarchy's stock collectors, which locate helpers such as `rg` with `shutil.which`; without it they skip pi and omp sessions and under-count Claude usage.
 - **Grandchildren stay in the group.** The two collectors that start an external CLI (`agy` for Antigravity, `grok agent stdio` for Grok) start it without a new session, so the CLI and anything it spawns stay in the supervised group and the deadline TERM/KILL reaches them. The Antigravity CLI also has its own 15 s per-call deadline and the Grok RPC a 12 s per-request deadline inside the 120 s supervisor deadline.
+- **Account changes and sign-ins.** Use, rename, and switch changes go through the supervisor like every collector, as `/usr/bin/bash /usr/share/omarchy/bin/omarchy-agent-account-<use|rename|mode>`, with arguments checked first (registry ids as short slugs, names without control characters, a threshold of 50–100). Sign-ins are the one thing the panel does not spawn itself: they need the desktop session, a browser, and a terminal to paste into, so `+ Account` and `Sign in again` hand `omarchy agent account add` to Omarchy's floating terminal through the bar's launcher, with the agent taken from a fixed list and any account id checked the same way.
 
 ## Bounded reads inside the collectors
 
